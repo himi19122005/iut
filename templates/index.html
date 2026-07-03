@@ -6,7 +6,40 @@
 </head>
 <body>
 
-    <h1>Hello Flask</h1>
+    <h3>Hello himi</h3>
+
+    <div class="room">
+    <h2>Drawing Room</h2>
+
+        <div class="device-card" id="drawingroom_fan1">OFF</div>
+        <div class="device-card" id="drawingroom_fan2">OFF</div>
+
+        <div class="device-card" id="drawingroom_light1">OFF</div>
+        <div class="device-card" id="drawingroom_light2">OFF</div>
+        <div class="device-card" id="drawingroom_light3">OFF</div>
+    </div>
+
+    <div class="room">
+        <h2>Work Room 1</h2>
+
+        <div class="device-card" id="workroom1_fan1">OFF</div>
+        <div class="device-card" id="workroom1_fan2">OFF</div>
+
+        <div class="device-card" id="workroom1_light1">OFF</div>
+        <div class="device-card" id="workroom1_light2">OFF</div>
+        <div class="device-card" id="workroom1_light3">OFF</div>
+    </div>
+
+    <div class="room">
+        <h2>Work Room 2</h2>
+
+        <div class="device-card" id="workroom2_fan1">OFF</div>
+        <div class="device-card" id="workroom2_fan2">OFF</div>
+
+        <div class="device-card" id="workroom2_light1">OFF</div>
+        <div class="device-card" id="workroom2_light2">OFF</div>
+        <div class="device-card" id="workroom2_light3">OFF</div>
+    </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
