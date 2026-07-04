@@ -8,20 +8,16 @@ The office has 3 rooms — **Drawing Room**, **Work Room 1**, and **Work Room 2*
 
 ## Architecture
 
-```
-Simulator (background thread in Flask)
-     → mutates in-memory device state
-     → emits live updates over WebSocket (device_update, usage_update)
-            ↓
-Flask backend (single source of truth)
-     → REST API: /api/devices, /api/usage
-     → WebSocket: real-time push to connected dashboards
-            ↓                              ↓
-Web Dashboard                    Discord Bot
-(Socket.IO client, live UI)      (polls REST endpoints on command)
-```
+![Architecture Diagram](diagrams/architecture.svg)
 
-One Flask process owns all device state. The dashboard and the Discord bot are both just clients reading from it — the dashboard via WebSocket + REST, the bot via REST only.
+- **Simulator** (a background thread inside Flask) mutates the in-memory device state on a timer, giving each device an independent random chance to flip on/off.
+- **Flask Backend** is the single source of truth. It exposes REST endpoints (`GET /api/devices`, `GET /api/usage`) and pushes live updates over WebSocket (`device_update`, `usage_update`) to any connected dashboard.
+- **Web Dashboard** connects via Socket.IO for live pushes, and also calls the REST endpoints once on page load so it shows correct data immediately, before the first update arrives.
+- **Discord Bot** never touches Flask's memory directly — it calls the same REST endpoints whenever a command is run (`!status`, `!room`, `!usage`, `!checkafterhours`), and also on a daily 9:30 PM schedule to check for devices left on and alert a Discord channel.
+
+Because both the dashboard and the bot read from the exact same backend, they can never show conflicting information — there is only ever one live copy of the truth.
+
+A rendered copy of this diagram is included at `diagrams/architecture.svg` so it displays correctly on GitHub/GitLab without relying on any diagramming syntax.
 
 ## Features Implemented
 
@@ -51,6 +47,110 @@ One Flask process owns all device state. The dashboard and the Discord bot are b
 - Optional natural-language response formatting via LLM (Groq), with automatic fallback to plain formatted text if the LLM call fails or is unavailable — ensures the bot never goes silent
 - Error handling around all backend calls (timeouts, connection failures) so the bot degrades gracefully instead of crashing if Flask is unreachable
 
+## Project Structure
+
+```
+office-energy-monitor/
+├── app.py                  # Flask app: routes, WebSocket events, simulator
+├── devices.py               # Initial device data (rooms, types, starting state)
+├── bot.py                    # Discord bot: commands + scheduled after-hours check
+├── requirements.txt
+├── .env.example              # Template for required environment variables
+├── templates/
+│   └── index.html            # Dashboard page
+├── static/
+│   ├── css/style.css
+│   └── js/script.js
+└── diagrams/
+    └── architecture.png      # Rendered system architecture diagram
+```
+(Adjust the tree above to match your actual filenames if they differ.)
+
+## Getting Started
+
+These steps take you from a fresh clone to a fully running system: Flask backend + dashboard in one terminal, Discord bot in another.
+
+### Prerequisites
+- Python 3.10+ installed
+- A Discord account, and permission to add a bot to a server (use your own test server if you don't have one — see Step 2)
+- Git
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/himi19122005/iut.git
+cd iut
+```
+
+### 2. Create a Discord Bot Application
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and log in.
+2. Click **New Application**, give it a name (e.g. "Office Energy Bot"), and create it.
+3. In the left sidebar, go to **Bot** → click **Reset Token** (or **Add Bot** if you don't see a token yet) → copy the token. **Keep this secret — never commit it.**
+4. On the same Bot page, scroll to **Privileged Gateway Intents** and enable **Message Content Intent** (required for the bot to read commands).
+5. In the left sidebar, go to **OAuth2 → URL Generator**:
+   - Under **Scopes**, check `bot`
+   - Under **Bot Permissions**, check `Send Messages`, `Read Message History`, `View Channels`
+   - Copy the generated URL at the bottom, open it in your browser, and select a server to add the bot to (create your own test server first if needed: Discord → **+** → **Create My Own**)
+6. Once the bot is in your server, enable **Developer Mode** in Discord (User Settings → Advanced → Developer Mode), then right-click the text channel you want alerts sent to and **Copy Channel ID** — save this for Step 4.
+
+### 3. Set up a Python virtual environment
+```bash
+python -m venv venv
+source venv/bin/activate      # macOS/Linux
+venv\Scripts\activate         # Windows
+```
+
+### 4. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+If there's no `requirements.txt` yet, generate one after installing everything locally:
+```bash
+pip freeze > requirements.txt
+```
+It should include at minimum: `flask`, `flask-socketio`, `discord.py`, `python-dotenv`, `requests`, and `groq` (if using the optional LLM phrasing feature).
+
+### 5. Configure environment variables
+Copy the example file and fill in your real values:
+```bash
+cp .env.example .env
+```
+Edit `.env`:
+```
+DISCORD_BOT_TOKEN=your-bot-token-from-step-2
+DISCORD_CHANNEL_ID=your-channel-id-from-step-2
+GROQ_API_KEY=your-groq-key-here        # optional, only needed if using LLM phrasing
+FLASK_URL=http://localhost:5000
+```
+`.env` is already listed in `.gitignore` and must never be committed.
+
+### 6. Run the Flask backend (dashboard + simulator + API)
+```bash
+python app.py
+```
+Visit **http://localhost:5000** in your browser — you should see the dashboard, with device cards updating live every couple of seconds as the simulator runs.
+
+### 7. Run the Discord bot (in a second terminal)
+Make sure the virtual environment is activated in this terminal too, then:
+```bash
+source venv/bin/activate   # if not already active
+python bot.py
+```
+Check the terminal for `Logged in as <bot-name>` and confirm the bot shows online in your Discord server.
+
+### 8. Try it out
+In your Discord server:
+- `!status` — overall office summary
+- `!room drawingroom` (or `work1`, `work2`) — status of one room
+- `!usage` — current power draw, energy used, estimated cost
+- `!checkafterhours` — manually trigger the after-hours check (also runs automatically every day at 9:30 PM)
+
+On the dashboard, watch devices flip on/off in real time and the KPI numbers update without refreshing the page.
+
+### Troubleshooting
+- **Bot doesn't respond to commands**: confirm `Message Content Intent` is enabled in the Developer Portal (Step 2.4), and that the bot has permission to view/send messages in the channel you're testing in.
+- **`!status`/`!usage` reply with a connection error**: make sure `app.py` (Flask) is running first, and that `FLASK_URL` in `.env` matches the port Flask is actually running on.
+- **Dashboard shows no devices**: check the browser console for errors, and confirm you're visiting the correct port shown in the Flask terminal output.
+
 ## Tech Stack
 - **Backend**: Python, Flask, Flask-SocketIO
 - **Frontend**: HTML, CSS, vanilla JavaScript, Socket.IO client
@@ -61,3 +161,4 @@ One Flask process owns all device state. The dashboard and the Discord bot are b
 - **Single source of truth**: All device state and power calculations live in one place (the Flask process). The dashboard and Discord bot are both simply clients of that one backend, guaranteeing they can never show conflicting information.
 - **True real-time, not polling**: The dashboard uses WebSocket server-push, so updates appear instantly as they happen rather than on a delay from periodic refreshing.
 - **Resilience**: Both the bot and dashboard handle backend downtime gracefully rather than crashing or hanging.
+
