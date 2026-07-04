@@ -17,6 +17,7 @@ socket.on("chat", (msg) => {
 function renderDevices(devices) {
     for (const deviceName in devices) {
         const status = devices[deviceName].status;
+        const type = devices[deviceName].type; // "fan" or "light"
         const card = document.getElementById(deviceName);
 
         if (!card) continue;
@@ -24,10 +25,9 @@ function renderDevices(devices) {
         const statusElement = card.querySelector(".status");
         statusElement.textContent = status.toUpperCase();
 
+        card.classList.remove("on", "fan", "light");
         if (status === "on") {
-            card.style.backgroundColor = "#98b13b";
-        } else {
-            card.style.backgroundColor = "#c55113";
+            card.classList.add("on", type);
         }
     }
 }
