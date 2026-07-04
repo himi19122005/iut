@@ -14,21 +14,49 @@ socket.on("chat", (msg) => {
 //     console.log(data);
 // }); delete this 
 
-socket.on("device_update", (devices) => {
-
+function renderDevices(devices) {
     for (const deviceName in devices) {
         const status = devices[deviceName].status;
-        console.log(status)
         const card = document.getElementById(deviceName);
-
         if (!card) continue;
-        card.textContent = status.toUpperCase(); //this only changes the display to uppercase
-
+        card.textContent = status.toUpperCase();
         if (status === "on") {
-            card.style.backgroundColor = "#daa671";
+            card.style.backgroundColor = "#98b13b";
         } else {
             card.style.backgroundColor = "#c55113";
         }
     }
+}
 
+function fetchDevices() {
+    fetch("/api/devices")
+        .then(res => res.json())
+        .then(data => renderDevices(data));
+}
+
+socket.on("device_update", (devices) => {
+    renderDevices(devices);
 });
+
+
+
+
+function renderUsage(data) {
+    document.getElementById("total-kwh").textContent = data.total_kwh;
+    document.getElementById("estimated-cost").textContent = data.estimated_cost + " Tk";
+    document.getElementById("current-watts").textContent = data.current_watts + " W";
+}
+
+function fetchUsage() {
+    fetch("/api/usage")
+        .then(res => res.json())
+        .then(data => renderUsage(data));
+}
+
+socket.on("usage_update", (data) => {
+    renderUsage(data);
+});
+
+// call once on page load
+fetchUsage();
+fetchDevices();
