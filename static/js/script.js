@@ -18,8 +18,12 @@ function renderDevices(devices) {
     for (const deviceName in devices) {
         const status = devices[deviceName].status;
         const card = document.getElementById(deviceName);
+
         if (!card) continue;
-        card.textContent = status.toUpperCase();
+
+        const statusElement = card.querySelector(".status");
+        statusElement.textContent = status.toUpperCase();
+
         if (status === "on") {
             card.style.backgroundColor = "#98b13b";
         } else {

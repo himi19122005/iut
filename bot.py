@@ -4,10 +4,13 @@ from dotenv import load_dotenv
 import os
 import requests
 from groq import Groq
+import datetime
+from discord.ext import tasks
 
 load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+CHANNEL_ID = 1522801616393076889
 
 FLASK_URL = "http://localhost:5000"
 
@@ -16,9 +19,6 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
 
 @bot.command()
 async def status(ctx):
@@ -190,5 +190,44 @@ async def usage(ctx):
         await ctx.send(f" *(AI phrasing unavailable, showing raw data)*\n```\n{raw_summary}\n```")
 
 
+async def check_after_hours_alert(channel):
+    try:
+        response = requests.get(f"{FLASK_URL}/api/devices", timeout=5)
+        response.raise_for_status()
+        devices = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Flask API failed: {e}")
+        await channel.send(" Couldn't reach the office dashboard for the after-hours check.")
+        return
+
+    on_devices = {k: v for k, v in devices.items() if v["status"] == "on"}
+
+    if not on_devices:
+        await channel.send(" After-hours check (9:30 PM): everything's off. Good to go!")
+        return
+
+    lines = [" **After-hours check (9:30 PM)** — these devices are still ON:"]
+    for device_id, info in on_devices.items():
+        lines.append(f"- {info['room']}: {info['type']} ({device_id})")
+    lines.append("\nPlease make sure someone turns these off before leaving.")
+
+    await channel.send("\n".join(lines))
+
+
+@tasks.loop(time=datetime.time(hour=21, minute=30))
+async def scheduled_check():
+    channel = bot.get_channel(CHANNEL_ID)
+    await check_after_hours_alert(channel)
+
+
+@bot.command()
+async def checkafterhours(ctx):
+    await check_after_hours_alert(ctx.channel)
+
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+    scheduled_check.start()
 
 bot.run(TOKEN)
